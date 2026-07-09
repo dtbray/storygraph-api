@@ -1,46 +1,46 @@
 from storygraph_api.exception_handler import request_exception
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-import time
+from storygraph_api.request.session import StoryGraphSession
 
 class UserScraper:
     @staticmethod
     @request_exception
-    def fetch_url(url,cookie):
-        options = Options()
-        options.add_argument("--headless") 
-        driver = webdriver.Chrome(options=options)
-        driver.get(url)
-        if cookie:
-            driver.add_cookie({
-                'name': 'remember_user_token',
-                'value': cookie,
-            })
-        driver.refresh()
-        SCROLL_PAUSE_TIME = 2
-        last_height = driver.execute_script("return document.body.scrollHeight")
-        while True:
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(SCROLL_PAUSE_TIME)
-            new_height = driver.execute_script("return document.body.scrollHeight")
-            if new_height == last_height:
-                break
-            last_height = new_height
-        html_content = driver.page_source
-        driver.quit()
-        return html_content
+    def fetch_url(url, cookie=None, transport=None):
+        client = transport or StoryGraphSession(cookie)
+        return client.get(url).text
 
     @staticmethod
-    def currently_reading(uname, cookie):
+    def get_profile_page(uname, cookie=None, transport=None):
+        return UserScraper.fetch_url(
+            f"https://app.thestorygraph.com/profile/{uname}", cookie, transport
+        )
+
+    @staticmethod
+    def currently_reading(uname, cookie=None, transport=None, page=None):
         url = f"https://app.thestorygraph.com/currently-reading/{uname}"
-        return UserScraper.fetch_url(url,cookie)
+        if page:
+            url = f"{url}?page={page}"
+        return UserScraper.fetch_url(url, cookie, transport)
 
     @staticmethod
-    def to_read(uname, cookie):
+    def to_read(uname, cookie=None, transport=None, page=None):
         url = f"https://app.thestorygraph.com/to-read/{uname}"
-        return UserScraper.fetch_url(url,cookie)
+        if page:
+            url = f"{url}?page={page}"
+        return UserScraper.fetch_url(url, cookie, transport)
 
     @staticmethod
-    def books_read(uname, cookie):
+    def books_read(uname, cookie=None, transport=None, page=None):
         url = f"https://app.thestorygraph.com/books-read/{uname}"
-        return UserScraper.fetch_url(url,cookie)
+        if page:
+            url = f"{url}?page={page}"
+        return UserScraper.fetch_url(url, cookie, transport)
+
+    @staticmethod
+    def journal(cookie=None, transport=None, page=None, book_id=None):
+        client = transport or StoryGraphSession(cookie)
+        params = {}
+        if page:
+            params['page'] = page
+        if book_id:
+            params['book_id'] = book_id
+        return client.get('/journal', params=params).text

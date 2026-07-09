@@ -18,6 +18,64 @@ pip install storygraph-api
 
 The API is divided into two components, `Books Client` and   `User Client`.
 
+### Authentication
+
+StoryGraph does not currently provide a public API. Authenticated requests use
+the same cookies as a logged-in browser session. On a trusted Linux machine,
+the client can load those cookies directly from Firefox:
+
+```python
+from storygraph_api import Book, User
+
+books = Book.from_firefox()
+user = User.from_firefox()
+
+print(user.currently_reading("sampleuname"))
+print(books.search("pride and prejudice"))
+```
+
+Firefox must have an active remembered StoryGraph login. Pass a profile path to
+`from_firefox(profile)` when automatic profile discovery selects the wrong one.
+The cookie values are read into memory and are never written by this package.
+
+For services that do not run alongside Firefox, pass cookies from a secret
+manager instead:
+
+```python
+from storygraph_api import User
+
+user = User(cookies={
+    "_storygraph_session": "...",
+    "remember_user_token": "...",
+})
+```
+
+StoryGraph rotates `_storygraph_session` during normal requests. The client
+keeps those updates for its lifetime. A Firefox-backed client reloads browser
+cookies once when a request indicates that authentication has expired.
+
+### Authenticated Read Methods
+
+```python
+user.get_user_id("sampleuname")
+user.currently_reading("sampleuname")
+user.to_read("sampleuname")
+user.up_next("sampleuname")
+user.books_read("sampleuname")
+user.get_all_journal_entries()
+
+books.book_info(book_id)
+books.search("search terms")
+books.reading_progress(book_id)
+books.get_journal_entries(book_id)
+books.get_read_dates(book_id)
+books.get_ai_summary(book_id, user_id)
+```
+
+Shelf and journal methods follow StoryGraph pagination until no new records are
+returned. All methods are read-only; no status, progress, tag, or journal data
+is modified.
+
 ### Book Details:
 
 ```python
@@ -26,7 +84,7 @@ The API is divided into two components, `Books Client` and   `User Client`.
 
 from storygraph_api import Book
 id = "fbdd6b7c-f512-47f2-aa94-d8bf0d5f5175"
-book = Book()
+book = Book.from_firefox()
 result = book.book_info(id)
 print(result)
 ```
