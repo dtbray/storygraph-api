@@ -13,7 +13,6 @@ setup(
     install_requires=[
         'requests',
         'beautifulsoup4',
-        'selenium',
     ],
     classifiers=[
         "Programming Language :: Python :: 3",

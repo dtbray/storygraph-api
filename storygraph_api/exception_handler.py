@@ -21,10 +21,12 @@ def request_exception(func):
     def wrapper(*args, **kwargs):
         try:
             return func(*args, **kwargs)
+        except RequestError:
+            raise
         except requests.RequestException as e:
-            return json.dumps({"error": f"Scraping Error: {str(e)}"}, indent=4)
+            raise RequestError(f"StoryGraph request failed: {str(e)}") from e
         except Exception as e:
-            return json.dumps({"error": f"Scraping Error: {str(e)}"}, indent=4)
+            raise RequestError(f"StoryGraph request failed: {str(e)}") from e
     return wrapper
 
 def parsing_exception(func):
@@ -32,8 +34,10 @@ def parsing_exception(func):
     def wrapper(*args, **kwargs):
         try:
             return func(*args, **kwargs)
-        except ParsingError as e:
-            return json.dumps({"error": e.message}, indent=4)
+        except ParsingError:
+            raise
         except Exception as e:
-            return json.dumps({"error": f"Parsing Error: {str(e)}"}, indent=4)
+            raise ParsingError(
+                f"Failed to parse StoryGraph content; the page may have changed: {str(e)}"
+            ) from e
     return wrapper
