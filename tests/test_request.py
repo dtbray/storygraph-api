@@ -2,8 +2,7 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from storygraph_api.exceptions import RequestError
 from storygraph_api.parse.user_parser import UserParser
@@ -164,11 +163,13 @@ class ParserRegressionTests(unittest.TestCase):
         """
         self.assertEqual(
             UserParser.parse_html(html),
-            [{
-                'title': 'The Book',
-                'book_id': 'book-uuid',
-                'authors': ['An Author'],
-            }],
+            [
+                {
+                    "title": "The Book",
+                    "book_id": "book-uuid",
+                    "authors": ["An Author"],
+                }
+            ],
         )
 
     def test_filtered_journal_uses_requested_book_id(self):
@@ -184,19 +185,21 @@ class ParserRegressionTests(unittest.TestCase):
         </span>
         """
         self.assertEqual(
-            UserParser.journal_entries(html, book_id='book-uuid'),
-            [{
-                'entry_id': 'entry-uuid',
-                'book_title': 'The Book',
-                'book_id': 'book-uuid',
-                'date': '8 July 2026',
-                'status': 'Started reading',
-                'progress_percent': None,
-                'pages_read_this_session': None,
-                'total_pages_read': None,
-                'total_pages': None,
-                'note': None,
-            }],
+            UserParser.journal_entries(html, book_id="book-uuid"),
+            [
+                {
+                    "entry_id": "entry-uuid",
+                    "book_title": "The Book",
+                    "book_id": "book-uuid",
+                    "date": "8 July 2026",
+                    "status": "Started reading",
+                    "progress_percent": None,
+                    "pages_read_this_session": None,
+                    "total_pages_read": None,
+                    "total_pages": None,
+                    "note": None,
+                }
+            ],
         )
 
 

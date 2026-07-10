@@ -13,7 +13,6 @@ import requests
 
 from storygraph_api.exceptions import RequestError
 
-
 BASE_URL = "https://app.thestorygraph.com"
 COOKIE_NAMES = ("_storygraph_session", "remember_user_token")
 SUPPORTED_BROWSERS = (
@@ -34,10 +33,10 @@ class CookieProvider(Protocol):
 
 class FirefoxCookieProvider:
     def __init__(self, profile: str | os.PathLike[str] | None = None) -> None:
-        self.profile = Path(profile).expanduser() if profile else find_firefox_profile()
+        self.profile = Path(profile).expanduser() if profile else None
 
     def load(self) -> dict[str, str]:
-        return load_firefox_cookies(self.profile)
+        return load_firefox_cookies(self.profile or find_firefox_profile())
 
 
 class BrowserCookieProvider:
@@ -49,7 +48,9 @@ class BrowserCookieProvider:
         browser = browser.lower()
         if browser != "auto" and browser not in SUPPORTED_BROWSERS:
             choices = ", ".join(("auto", *SUPPORTED_BROWSERS))
-            raise RequestError(f"Unsupported browser '{browser}'. Choose one of: {choices}.")
+            raise RequestError(
+                f"Unsupported browser '{browser}'. Choose one of: {choices}."
+            )
         if browser == "auto" and profile:
             raise RequestError(
                 "A browser name is required when an explicit profile path is provided."
@@ -60,8 +61,10 @@ class BrowserCookieProvider:
     def load(self) -> dict[str, str]:
         if self.browser == "firefox":
             return FirefoxCookieProvider(self.profile).load()
-        loader = browser_cookie3.load if self.browser == "auto" else getattr(
-            browser_cookie3, self.browser
+        loader = (
+            browser_cookie3.load
+            if self.browser == "auto"
+            else getattr(browser_cookie3, self.browser)
         )
         kwargs = {"domain_name": "app.thestorygraph.com"}
         if self.profile:
@@ -103,7 +106,9 @@ class StoryGraphSession:
         cookie_provider: CookieProvider | None = None,
     ) -> None:
         self.timeout = timeout
-        self.firefox_profile = Path(firefox_profile).expanduser() if firefox_profile else None
+        self.firefox_profile = (
+            Path(firefox_profile).expanduser() if firefox_profile else None
+        )
         self.cookie_provider = cookie_provider
         if self.cookie_provider is None and self.firefox_profile:
             self.cookie_provider = FirefoxCookieProvider(self.firefox_profile)
@@ -128,7 +133,7 @@ class StoryGraphSession:
         profile: str | os.PathLike[str] | None = None,
         *,
         timeout: float = 20,
-    ) -> "StoryGraphSession":
+    ) -> StoryGraphSession:
         provider = FirefoxCookieProvider(profile)
         return cls(timeout=timeout, cookie_provider=provider)
 
@@ -139,7 +144,7 @@ class StoryGraphSession:
         profile: str | os.PathLike[str] | None = None,
         *,
         timeout: float = 20,
-    ) -> "StoryGraphSession":
+    ) -> StoryGraphSession:
         return cls(
             timeout=timeout,
             cookie_provider=BrowserCookieProvider(browser=browser, profile=profile),
@@ -149,11 +154,15 @@ class StoryGraphSession:
         values = (
             {"remember_user_token": cookies}
             if isinstance(cookies, str)
-            else {name: value for name, value in cookies.items() if name in COOKIE_NAMES}
+            else {
+                name: value for name, value in cookies.items() if name in COOKIE_NAMES
+            }
         )
         for name, value in values.items():
             if value:
-                self.session.cookies.set(name, value, domain="app.thestorygraph.com", path="/")
+                self.session.cookies.set(
+                    name, value, domain="app.thestorygraph.com", path="/"
+                )
 
     def refresh_cookies(self) -> None:
         if not self.cookie_provider:
@@ -210,9 +219,13 @@ def find_firefox_profile() -> Path:
                 candidates.append(path if path.is_absolute() else root / path)
         candidates.extend(path.parent for path in root.glob("*/cookies.sqlite"))
 
-    valid = {path.resolve() for path in candidates if (path / "cookies.sqlite").exists()}
+    valid = {
+        path.resolve() for path in candidates if (path / "cookies.sqlite").exists()
+    }
     if not valid:
-        raise RequestError("Could not find a Firefox profile containing cookies.sqlite.")
+        raise RequestError(
+            "Could not find a Firefox profile containing cookies.sqlite."
+        )
     return max(valid, key=lambda path: (path / "cookies.sqlite").stat().st_mtime)
 
 
@@ -234,8 +247,7 @@ def load_firefox_cookies(profile: str | os.PathLike[str]) -> dict[str, str]:
         connection = sqlite3.connect(snapshot)
         try:
             rows = connection.execute(
-                "SELECT name, value FROM moz_cookies "
-                "WHERE host = ? AND name IN (?, ?)",
+                "SELECT name, value FROM moz_cookies WHERE host = ? AND name IN (?, ?)",
                 ("app.thestorygraph.com", *COOKIE_NAMES),
             ).fetchall()
         finally:
@@ -246,7 +258,9 @@ def load_firefox_cookies(profile: str | os.PathLike[str]) -> dict[str, str]:
 
 def require_remembered_login(cookies: dict[str, str], source: str) -> dict[str, str]:
     if "remember_user_token" not in cookies:
-        raise RequestError(f"The {source} is not logged into StoryGraph with a remembered session.")
+        raise RequestError(
+            f"The {source} is not logged into StoryGraph with a remembered session."
+        )
     return cookies
 
 

@@ -1,5 +1,7 @@
 import requests
+
 from storygraph_api.exception_handler import request_exception
+
 
 class BooksScraper:
     @staticmethod
@@ -26,24 +28,27 @@ class BooksScraper:
 
     @staticmethod
     def journal(book_id, transport):
-        return transport.get('/journal', params={'book_id': book_id}).content
+        return transport.get("/journal", params={"book_id": book_id}).content
 
     @staticmethod
     def personalized_preview(book_id, user_id, transport):
         return transport.get(
-            '/personalized-preview.turbo_stream',
-            params={'book_id': book_id, 'personalized': 'false', 'user_id': user_id},
+            "/personalized-preview.turbo_stream",
+            params={"book_id": book_id, "personalized": "false", "user_id": user_id},
         ).content
 
     @staticmethod
     def search(query, transport=None):
         if transport:
             response = transport.get(
-                "/search", params={"search_term": query, "turbo_frame": "search_results"}
+                "/search",
+                params={"search_term": query, "turbo_frame": "search_results"},
             )
             return response.content
         response = requests.get(
-            "https://app.thestorygraph.com/browse", params={"search_term": query}, timeout=20
+            "https://app.thestorygraph.com/browse",
+            params={"search_term": query},
+            timeout=20,
         )
         response.raise_for_status()
         return response.content

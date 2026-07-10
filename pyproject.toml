@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "storygraph-api"
+version = "0.2.1"
+description = "An unofficial Python client for reading data from StoryGraph."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+  { name = "Yogendra Mishra", email = "yogendramishra2004@gmail.com" },
+]
+keywords = ["storygraph", "books", "reading", "api-client"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+  "beautifulsoup4>=4.12,<5",
+  "browser-cookie3>=0.20,<1",
+  "requests>=2.32,<3",
+]
+
+[project.optional-dependencies]
+dev = [
+  "build>=1.2,<2",
+  "pytest>=8,<9",
+  "ruff>=0.12,<1",
+]
+
+[project.urls]
+Homepage = "https://github.com/dtbray/storygraph-api"
+Issues = "https://github.com/dtbray/storygraph-api/issues"
+Repository = "https://github.com/dtbray/storygraph-api"
+
+[tool.setuptools.packages.find]
+include = ["storygraph_api*"]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-config --strict-markers"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["B", "E", "F", "I", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B017"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"

@@ -14,3 +14,14 @@ build/
 dist/
 *.egg-info/
 .eggs/
+
+# test and tool caches
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# editor and operating system files
+.idea/
+.vscode/
+.DS_Store

@@ -1,6 +1,7 @@
 from storygraph_api.exception_handler import request_exception
 from storygraph_api.request.session import StoryGraphSession
 
+
 class UserScraper:
     @staticmethod
     @request_exception
@@ -40,7 +41,7 @@ class UserScraper:
         client = transport or StoryGraphSession(cookie)
         params = {}
         if page:
-            params['page'] = page
+            params["page"] = page
         if book_id:
-            params['book_id'] = book_id
-        return client.get('/journal', params=params).text
+            params["book_id"] = book_id
+        return client.get("/journal", params=params).text
