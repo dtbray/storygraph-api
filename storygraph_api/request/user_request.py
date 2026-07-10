@@ -1,3 +1,5 @@
+from urllib.parse import quote
+
 from storygraph_api.exception_handler import request_exception
 from storygraph_api.request.session import StoryGraphSession
 
@@ -12,26 +14,31 @@ class UserScraper:
     @staticmethod
     def get_profile_page(uname, cookie=None, transport=None):
         return UserScraper.fetch_url(
-            f"https://app.thestorygraph.com/profile/{uname}", cookie, transport
+            f"https://app.thestorygraph.com/profile/{quote(str(uname), safe='')}",
+            cookie,
+            transport,
         )
 
     @staticmethod
     def currently_reading(uname, cookie=None, transport=None, page=None):
-        url = f"https://app.thestorygraph.com/currently-reading/{uname}"
+        url = (
+            "https://app.thestorygraph.com/currently-reading/"
+            f"{quote(str(uname), safe='')}"
+        )
         if page:
             url = f"{url}?page={page}"
         return UserScraper.fetch_url(url, cookie, transport)
 
     @staticmethod
     def to_read(uname, cookie=None, transport=None, page=None):
-        url = f"https://app.thestorygraph.com/to-read/{uname}"
+        url = f"https://app.thestorygraph.com/to-read/{quote(str(uname), safe='')}"
         if page:
             url = f"{url}?page={page}"
         return UserScraper.fetch_url(url, cookie, transport)
 
     @staticmethod
     def books_read(uname, cookie=None, transport=None, page=None):
-        url = f"https://app.thestorygraph.com/books-read/{uname}"
+        url = f"https://app.thestorygraph.com/books-read/{quote(str(uname), safe='')}"
         if page:
             url = f"{url}?page={page}"
         return UserScraper.fetch_url(url, cookie, transport)

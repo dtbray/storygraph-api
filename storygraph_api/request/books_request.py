@@ -1,3 +1,5 @@
+from urllib.parse import quote
+
 import requests
 
 from storygraph_api.exception_handler import request_exception
@@ -13,17 +15,23 @@ class BooksScraper:
 
     @staticmethod
     def main(book_id, transport=None):
-        url = f"https://app.thestorygraph.com/books/{book_id}"
+        url = f"https://app.thestorygraph.com/books/{quote(str(book_id), safe='')}"
         return BooksScraper.fetch_url(url, transport)
 
     @staticmethod
     def community_reviews(book_id, transport=None):
-        url = f"https://app.thestorygraph.com/books/{book_id}/community_reviews"
+        url = (
+            "https://app.thestorygraph.com/books/"
+            f"{quote(str(book_id), safe='')}/community_reviews"
+        )
         return BooksScraper.fetch_url(url, transport)
 
     @staticmethod
     def content_warnings(book_id, transport=None):
-        url = f"https://app.thestorygraph.com/books/{book_id}/content_warnings"
+        url = (
+            "https://app.thestorygraph.com/books/"
+            f"{quote(str(book_id), safe='')}/content_warnings"
+        )
         return BooksScraper.fetch_url(url, transport)
 
     @staticmethod

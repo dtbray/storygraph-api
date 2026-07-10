@@ -32,7 +32,9 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "build>=1.2,<2",
+  "pip-audit>=2.9,<3",
   "pytest>=8,<9",
+  "pytest-cov>=6,<8",
   "ruff>=0.12,<1",
 ]
 
@@ -45,7 +47,7 @@ Repository = "https://github.com/dtbray/storygraph-api"
 include = ["storygraph_api*"]
 
 [tool.pytest.ini_options]
-addopts = "-ra --strict-config --strict-markers"
+addopts = "-ra --strict-config --strict-markers --cov=storygraph_api --cov-report=term-missing --cov-fail-under=70"
 testpaths = ["tests"]
 
 [tool.ruff]

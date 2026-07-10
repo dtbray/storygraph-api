@@ -74,10 +74,21 @@ class User:
                 UserScraper.journal(cookie, self.transport, page=page)
             )
             new_entries = [
-                entry for entry in page_entries if entry["entry_id"] not in seen
+                entry for entry in page_entries if journal_key(entry) not in seen
             ]
             if not new_entries:
                 break
             entries.extend(new_entries)
-            seen.update(entry["entry_id"] for entry in new_entries)
+            seen.update(journal_key(entry) for entry in new_entries)
         return json.dumps(entries, indent=4)
+
+
+def journal_key(entry):
+    return entry["entry_id"] or (
+        entry["book_id"],
+        entry["date"],
+        entry["status"],
+        entry["progress_percent"],
+        entry["pages_read_this_session"],
+        entry["note"],
+    )

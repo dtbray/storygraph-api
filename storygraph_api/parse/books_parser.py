@@ -73,7 +73,10 @@ class BooksParser:
     def content_warnings(book_id, transport=None):
         warnings_content = BooksScraper.content_warnings(book_id, transport)
         warnings_soup = BeautifulSoup(warnings_content, "html.parser")
-        user_warnings_pane = warnings_soup.find_all("div", class_="standard-pane")[1]
+        panes = warnings_soup.find_all("div", class_="standard-pane")
+        if len(panes) < 2:
+            return {"graphic": [], "moderate": [], "minor": []}
+        user_warnings_pane = panes[1]
         warnings_graphic = []
         warnings_moderate = []
         warnings_minor = []
@@ -90,8 +93,9 @@ class BooksParser:
                 elif tag.text == "Minor":
                     warnings_list = warnings_minor
             elif tag.name == "div":
-                match = tag_re.match(tag.text)
-                warnings_list.append(match[1])
+                match = tag_re.match(tag.get_text(" ", strip=True))
+                if match:
+                    warnings_list.append(match[1])
         warnings = {
             "graphic": warnings_graphic,
             "moderate": warnings_moderate,
