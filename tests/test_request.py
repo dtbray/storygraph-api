@@ -4,6 +4,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import requests
+
 from storygraph_api.exceptions import RequestError
 from storygraph_api.parse.user_parser import UserParser
 from storygraph_api.request.session import (
@@ -77,7 +79,7 @@ class FirefoxCookieTests(unittest.TestCase):
 
 class StoryGraphSessionTests(unittest.TestCase):
     def test_legacy_cookie_string_sets_remember_token(self):
-        transport = StoryGraphSession("remember")
+        transport = StoryGraphSession("remember", min_request_interval=0)
         self.assertEqual(
             transport.session.cookies.get(
                 "remember_user_token", domain="app.thestorygraph.com", path="/"
@@ -88,7 +90,7 @@ class StoryGraphSessionTests(unittest.TestCase):
     def test_reloads_provider_cookies_once_after_auth_failure(self):
         provider = Mock()
         provider.load.return_value = {"remember_user_token": "remember"}
-        transport = StoryGraphSession(cookie_provider=provider)
+        transport = StoryGraphSession(cookie_provider=provider, min_request_interval=0)
         provider.reset_mock()
         forbidden = Mock(status_code=403, url="https://app.thestorygraph.com/")
         success = Mock(status_code=200, url="https://app.thestorygraph.com/")
@@ -98,6 +100,74 @@ class StoryGraphSessionTests(unittest.TestCase):
         self.assertIs(transport.get("/"), success)
         provider.load.assert_called_once_with()
         self.assertEqual(transport.session.request.call_count, 2)
+
+    def test_does_not_replay_post_after_authentication_failure(self):
+        provider = Mock()
+        provider.load.return_value = {"remember_user_token": "remember"}
+        transport = StoryGraphSession(cookie_provider=provider, min_request_interval=0)
+        provider.reset_mock()
+        forbidden = Mock(status_code=403, url="https://app.thestorygraph.com/")
+        transport.session.request = Mock(return_value=forbidden)
+
+        with self.assertRaises(RequestError):
+            transport.request("POST", "/update-progress")
+
+        provider.load.assert_not_called()
+        transport.session.request.assert_called_once()
+
+    def test_refresh_replaces_stale_authentication_cookies(self):
+        provider = Mock()
+        provider.load.return_value = {"remember_user_token": "new-remember"}
+        transport = StoryGraphSession(
+            {
+                "_storygraph_session": "stale-session",
+                "remember_user_token": "stale-remember",
+            },
+            min_request_interval=0,
+        )
+        transport.cookie_provider = provider
+
+        transport.refresh_cookies()
+
+        self.assertIsNone(
+            transport.session.cookies.get(
+                "_storygraph_session", domain="app.thestorygraph.com", path="/"
+            )
+        )
+        self.assertEqual(
+            transport.session.cookies.get(
+                "remember_user_token", domain="app.thestorygraph.com", path="/"
+            ),
+            "new-remember",
+        )
+
+    def test_restricts_authenticated_requests_to_storygraph(self):
+        transport = StoryGraphSession("remember", min_request_interval=0)
+        with self.assertRaises(RequestError):
+            transport.get("https://example.com/")
+
+    def test_wraps_network_failures(self):
+        transport = StoryGraphSession("remember", min_request_interval=0)
+        transport.session.request = Mock(
+            side_effect=requests.ConnectionError("network unavailable")
+        )
+        with self.assertRaises(RequestError) as error:
+            transport.get("/")
+        self.assertIn("network unavailable", str(error.exception))
+
+    def test_configures_bounded_get_only_retries(self):
+        transport = StoryGraphSession("remember", min_request_interval=0, retry_total=3)
+        retry = transport.session.get_adapter("https://").max_retries
+        self.assertEqual(retry.total, 3)
+        self.assertEqual(retry.allowed_methods, frozenset({"GET", "HEAD"}))
+
+    def test_rejects_invalid_transport_settings(self):
+        with self.assertRaises(ValueError):
+            StoryGraphSession(timeout=0)
+        with self.assertRaises(ValueError):
+            StoryGraphSession(min_request_interval=-1)
+        with self.assertRaises(ValueError):
+            StoryGraphSession(retry_total=-1)
 
 
 class BrowserCookieProviderTests(unittest.TestCase):
@@ -131,16 +201,63 @@ class BrowserCookieProviderTests(unittest.TestCase):
         with self.assertRaises(RequestError):
             BrowserCookieProvider("auto", "/tmp/profile")
 
-    def test_auto_browser_falls_back_when_aggregate_loader_breaks(self):
-        with patch("browser_cookie3.load", side_effect=TypeError("broken adapter")):
+    def test_auto_browser_skips_broken_adapter(self):
+        with patch(
+            "storygraph_api.request.session.SUPPORTED_BROWSERS",
+            ("firefox", "chromium"),
+        ):
             with patch(
                 "storygraph_api.request.session.FirefoxCookieProvider.load",
                 return_value={"remember_user_token": "remember"},
             ):
-                self.assertEqual(
-                    BrowserCookieProvider("auto").load(),
-                    {"remember_user_token": "remember"},
-                )
+                with patch(
+                    "browser_cookie3.chromium", side_effect=RuntimeError("broken")
+                ):
+                    self.assertEqual(
+                        BrowserCookieProvider("auto").load(),
+                        {"remember_user_token": "remember"},
+                    )
+
+    def test_auto_browser_rejects_different_logins(self):
+        chromium_cookie = Mock(domain="app.thestorygraph.com", value="chromium")
+        chromium_cookie.name = "remember_user_token"
+        with patch(
+            "storygraph_api.request.session.SUPPORTED_BROWSERS",
+            ("firefox", "chromium"),
+        ):
+            with patch(
+                "storygraph_api.request.session.FirefoxCookieProvider.load",
+                return_value={"remember_user_token": "firefox"},
+            ):
+                with patch("browser_cookie3.chromium", return_value=[chromium_cookie]):
+                    with self.assertRaisesRegex(RequestError, "select a browser"):
+                        BrowserCookieProvider("auto").load()
+
+    def test_auto_browser_allows_same_login_with_different_sessions(self):
+        chromium_cookies = []
+        for name, value in (
+            ("remember_user_token", "same-account"),
+            ("_storygraph_session", "chromium-session"),
+        ):
+            cookie = Mock(domain="app.thestorygraph.com", value=value)
+            cookie.name = name
+            chromium_cookies.append(cookie)
+        with patch(
+            "storygraph_api.request.session.SUPPORTED_BROWSERS",
+            ("firefox", "chromium"),
+        ):
+            with patch(
+                "storygraph_api.request.session.FirefoxCookieProvider.load",
+                return_value={
+                    "remember_user_token": "same-account",
+                    "_storygraph_session": "firefox-session",
+                },
+            ):
+                with patch("browser_cookie3.chromium", return_value=chromium_cookies):
+                    self.assertEqual(
+                        BrowserCookieProvider("auto").load()["_storygraph_session"],
+                        "firefox-session",
+                    )
 
     def test_profile_directory_resolves_chromium_network_database(self):
         with tempfile.TemporaryDirectory() as directory:
