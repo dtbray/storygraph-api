@@ -97,10 +97,10 @@ class BrowserCookieProvider:
             raise RequestError(
                 "No supported browser has a remembered StoryGraph login."
             )
-        unique_credentials = {
-            tuple(sorted(credentials.items())) for _, credentials in candidates
+        remembered_accounts = {
+            credentials["remember_user_token"] for _, credentials in candidates
         }
-        if len(unique_credentials) > 1:
+        if len(remembered_accounts) > 1:
             browsers = ", ".join(browser for browser, _ in candidates)
             raise RequestError(
                 "Multiple browsers have different StoryGraph logins "

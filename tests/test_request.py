@@ -233,6 +233,32 @@ class BrowserCookieProviderTests(unittest.TestCase):
                     with self.assertRaisesRegex(RequestError, "select a browser"):
                         BrowserCookieProvider("auto").load()
 
+    def test_auto_browser_allows_same_login_with_different_sessions(self):
+        chromium_cookies = []
+        for name, value in (
+            ("remember_user_token", "same-account"),
+            ("_storygraph_session", "chromium-session"),
+        ):
+            cookie = Mock(domain="app.thestorygraph.com", value=value)
+            cookie.name = name
+            chromium_cookies.append(cookie)
+        with patch(
+            "storygraph_api.request.session.SUPPORTED_BROWSERS",
+            ("firefox", "chromium"),
+        ):
+            with patch(
+                "storygraph_api.request.session.FirefoxCookieProvider.load",
+                return_value={
+                    "remember_user_token": "same-account",
+                    "_storygraph_session": "firefox-session",
+                },
+            ):
+                with patch("browser_cookie3.chromium", return_value=chromium_cookies):
+                    self.assertEqual(
+                        BrowserCookieProvider("auto").load()["_storygraph_session"],
+                        "firefox-session",
+                    )
+
     def test_profile_directory_resolves_chromium_network_database(self):
         with tempfile.TemporaryDirectory() as directory:
             cookie_file = Path(directory) / "Network" / "Cookies"
