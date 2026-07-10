@@ -33,10 +33,10 @@ class CookieProvider(Protocol):
 
 class FirefoxCookieProvider:
     def __init__(self, profile: str | os.PathLike[str] | None = None) -> None:
-        self.profile = Path(profile).expanduser() if profile else find_firefox_profile()
+        self.profile = Path(profile).expanduser() if profile else None
 
     def load(self) -> dict[str, str]:
-        return load_firefox_cookies(self.profile)
+        return load_firefox_cookies(self.profile or find_firefox_profile())
 
 
 class BrowserCookieProvider:
