@@ -22,21 +22,30 @@ The API is divided into two components, `Books Client` and   `User Client`.
 
 StoryGraph does not currently provide a public API. Authenticated requests use
 the same cookies as a logged-in browser session. On a trusted Linux machine,
-the client can load those cookies directly from Firefox:
+the client can load those cookies from an installed browser:
 
 ```python
 from storygraph_api import Book, User
 
-books = Book.from_firefox()
-user = User.from_firefox()
+books = Book.from_browser()  # auto-detect
+user = User.from_browser("firefox")
 
 print(user.currently_reading("sampleuname"))
 print(books.search("pride and prejudice"))
 ```
 
-Firefox must have an active remembered StoryGraph login. Pass a profile path to
-`from_firefox(profile)` when automatic profile discovery selects the wrong one.
-The cookie values are read into memory and are never written by this package.
+The selected browser must have an active remembered StoryGraph login. Supported
+browsers are Firefox, Chrome, Chromium, Brave, Edge, Vivaldi, Opera, and Safari.
+Pass both a browser name and profile path when automatic discovery selects the
+wrong profile:
+
+```python
+books = Book.from_browser("chromium", profile="~/.config/chromium/Profile 2")
+```
+
+`from_firefox(profile)` remains available as a compatibility alias backed by
+the native Firefox cookie loader. Cookie values are read into memory and are
+never written by this package.
 
 For services that do not run alongside Firefox, pass cookies from a secret
 manager instead:
@@ -51,7 +60,7 @@ user = User(cookies={
 ```
 
 StoryGraph rotates `_storygraph_session` during normal requests. The client
-keeps those updates for its lifetime. A Firefox-backed client reloads browser
+keeps those updates for its lifetime. A browser-backed client reloads browser
 cookies once when a request indicates that authentication has expired.
 
 ### Authenticated Read Methods

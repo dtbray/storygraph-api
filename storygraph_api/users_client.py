@@ -13,6 +13,10 @@ class User:
     def from_firefox(cls, profile=None):
         return cls(transport=StoryGraphSession.from_firefox(profile))
 
+    @classmethod
+    def from_browser(cls, browser="auto", profile=None):
+        return cls(transport=StoryGraphSession.from_browser(browser, profile))
+
     def _fetch_paginated(self, fetch, uname, cookie=None):
         results = []
         seen = set()
