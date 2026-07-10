@@ -30,8 +30,6 @@ def request_exception(func):
             raise
         except requests.RequestException as e:
             raise RequestError(f"StoryGraph request failed: {str(e)}") from e
-        except Exception as e:
-            raise RequestError(f"StoryGraph request failed: {str(e)}") from e
 
     return wrapper
 

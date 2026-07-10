@@ -138,17 +138,10 @@ print(result)
 ### User List:
 
 ```python
-# User Client
-# works only for public profiles
-# fetch user's currently reading list
-
 from storygraph_api import User
-from dotenv import load_dotenv
-load_dotenv()
-cookie = os.getenv('COOKIE') # retrieve cookie from .env file
-uname = 'sampleuname' #some username 
-user = User()
-result = user.currently_reading(uname,cookie=cookie)
+
+user = User.from_browser()
+result = user.currently_reading("sampleuname")
 print(result)
 
 ```
@@ -159,19 +152,24 @@ print(result)
   [
     {
         "title": "The Murder After the Night Before",
-        "book_id": "38cb5b56-23f1-48fd-b4b3-a80e07a19775"
+        "book_id": "38cb5b56-23f1-48fd-b4b3-a80e07a19775",
+        "authors": ["Katie Brent"]
     },
     {
         "title": "The Graces",
-        "book_id": "653b54b3-a79d-4c2e-ae40-eae281a91315"
+        "book_id": "653b54b3-a79d-4c2e-ae40-eae281a91315",
+        "authors": ["Laure Eve"]
     }
 ]
 
   ```
 
-## Further Information 
-*  Refer to [books_client.py](https://github.com/ym496/storygraph-api/tree/main/storygraph_api/books_client.py) and [users_client.py](https://github.com/ym496/storygraph-api/tree/main/storygraph_api/users_client.py) files to know more functionalities.
-*  All the user related tasks require the `remember_user_token` cookie. It can be found in the `Application` section of your browser’s developer tools for the StoryGraph website.
+## Further Information
+
+Refer to [books_client.py](storygraph_api/books_client.py) and
+[users_client.py](storygraph_api/users_client.py) for the public methods. Browser
+authentication requires a remembered StoryGraph login and is read from the
+selected browser at runtime.
 
 ## Contributing
 Contributions are welcome! Fork the repository, make your changes, and submit a pull request.
@@ -187,6 +185,7 @@ ruff check .
 ruff format --check .
 pytest
 python -m build
+pip-audit .
 ```
 
 Ruff provides both linting and formatting for this project. Run `ruff check
