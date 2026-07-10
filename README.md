@@ -178,6 +178,20 @@ Contributions are welcome! Fork the repository, make your changes, and submit a 
 
 For bugs or feature requests, please open an issue on [GitHub](https://github.com/ym496/storygraph-api/issues).
 
+Install the package with its development dependencies, then run the same checks
+used in CI:
+
+```bash
+python -m pip install -e ".[dev]"
+ruff check .
+ruff format --check .
+pytest
+python -m build
+```
+
+Ruff provides both linting and formatting for this project. Run `ruff check
+--fix .` and `ruff format .` before submitting changes.
+
 ## License
 
 This project is licensed under the MIT License.

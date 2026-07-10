@@ -1,7 +1,9 @@
-from storygraph_api.parse.books_parser import BooksParser
-from storygraph_api.exception_handler import handle_exceptions
-from storygraph_api.request.session import StoryGraphSession
 import json
+
+from storygraph_api.exception_handler import handle_exceptions
+from storygraph_api.parse.books_parser import BooksParser
+from storygraph_api.request.session import StoryGraphSession
+
 
 class Book:
     def __init__(self, cookies=None, *, firefox_profile=None, transport=None):
@@ -18,13 +20,15 @@ class Book:
         return cls(transport=StoryGraphSession.from_browser(browser, profile))
 
     @handle_exceptions
-    def book_info(self,book_id):
+    def book_info(self, book_id):
         data = BooksParser.book_page(book_id, self.transport)
-        return json.dumps(data,indent=4)
+        return json.dumps(data, indent=4)
 
     def _require_transport(self):
         if self.transport is None:
-            raise ValueError('This method requires authenticated cookies or Book.from_firefox().')
+            raise ValueError(
+                "This method requires authenticated cookies or Book.from_firefox()."
+            )
         return self.transport
 
     @handle_exceptions
@@ -41,7 +45,9 @@ class Book:
 
     @handle_exceptions
     def get_read_dates(self, book_id):
-        return json.dumps(BooksParser.read_dates(book_id, self._require_transport()), indent=4)
+        return json.dumps(
+            BooksParser.read_dates(book_id, self._require_transport()), indent=4
+        )
 
     @handle_exceptions
     def get_ai_summary(self, book_id, user_id):
@@ -53,6 +59,6 @@ class Book:
         )
 
     @handle_exceptions
-    def search(self,query):
+    def search(self, query):
         data = BooksParser.search(query, self.transport)
-        return json.dumps(data,indent=4)
+        return json.dumps(data, indent=4)
