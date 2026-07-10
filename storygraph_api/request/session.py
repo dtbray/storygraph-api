@@ -58,6 +58,8 @@ class BrowserCookieProvider:
         self.profile = Path(profile).expanduser() if profile else None
 
     def load(self) -> dict[str, str]:
+        if self.browser == "firefox":
+            return FirefoxCookieProvider(self.profile).load()
         loader = browser_cookie3.load if self.browser == "auto" else getattr(
             browser_cookie3, self.browser
         )
@@ -67,7 +69,7 @@ class BrowserCookieProvider:
         try:
             jar = loader(**kwargs)
         except Exception as exc:
-            if self.browser in ("auto", "firefox"):
+            if self.browser == "auto":
                 try:
                     return FirefoxCookieProvider().load()
                 except RequestError:
@@ -78,9 +80,10 @@ class BrowserCookieProvider:
         cookies = {
             cookie.name: cookie.value
             for cookie in jar
-            if cookie.name in COOKIE_NAMES and cookie.domain.endswith("thestorygraph.com")
+            if cookie.name in COOKIE_NAMES
+            and (cookie.domain or "").endswith("thestorygraph.com")
         }
-        if "remember_user_token" not in cookies and self.browser in ("auto", "firefox"):
+        if "remember_user_token" not in cookies and self.browser == "auto":
             try:
                 cookies = FirefoxCookieProvider().load()
             except RequestError:
@@ -255,6 +258,6 @@ def resolve_cookie_file(profile: Path, browser: str) -> Path:
     )
     for relative_path in candidates:
         candidate = profile / relative_path
-        if candidate.exists():
+        if candidate.is_file():
             return candidate
     raise RequestError(f"No cookie database found in browser profile: {profile}")

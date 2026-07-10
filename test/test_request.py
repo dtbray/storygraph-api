@@ -56,6 +56,25 @@ class FirefoxCookieTests(unittest.TestCase):
             with self.assertRaises(RequestError):
                 load_firefox_cookies(directory)
 
+    def test_browser_provider_preserves_explicit_firefox_profile(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "cookies.sqlite"
+            connection = sqlite3.connect(database)
+            connection.execute(
+                "CREATE TABLE moz_cookies (host TEXT, name TEXT, value TEXT)"
+            )
+            connection.execute(
+                "INSERT INTO moz_cookies VALUES (?, ?, ?)",
+                ("app.thestorygraph.com", "remember_user_token", "explicit"),
+            )
+            connection.commit()
+            connection.close()
+
+            self.assertEqual(
+                BrowserCookieProvider("firefox", directory).load(),
+                {"remember_user_token": "explicit"},
+            )
+
 
 class StoryGraphSessionTests(unittest.TestCase):
     def test_legacy_cookie_string_sets_remember_token(self):
@@ -101,6 +120,13 @@ class BrowserCookieProviderTests(unittest.TestCase):
                 },
             )
         loader.assert_called_once_with(domain_name="app.thestorygraph.com")
+
+    def test_ignores_cookie_with_missing_domain(self):
+        cookie = Mock(domain=None, value="remember")
+        cookie.name = "remember_user_token"
+        with patch("browser_cookie3.chromium", return_value=[cookie]):
+            with self.assertRaises(RequestError):
+                BrowserCookieProvider("chromium").load()
 
     def test_auto_browser_rejects_explicit_profile(self):
         with self.assertRaises(RequestError):
