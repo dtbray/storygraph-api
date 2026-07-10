@@ -13,6 +13,10 @@ class Book:
     def from_firefox(cls, profile=None):
         return cls(transport=StoryGraphSession.from_firefox(profile))
 
+    @classmethod
+    def from_browser(cls, browser="auto", profile=None):
+        return cls(transport=StoryGraphSession.from_browser(browser, profile))
+
     @handle_exceptions
     def book_info(self,book_id):
         data = BooksParser.book_page(book_id, self.transport)

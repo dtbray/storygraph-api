@@ -13,6 +13,7 @@ setup(
     install_requires=[
         'requests',
         'beautifulsoup4',
+        'browser-cookie3',
     ],
     classifiers=[
         "Programming Language :: Python :: 3",
