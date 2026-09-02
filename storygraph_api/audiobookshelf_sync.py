@@ -19,6 +19,20 @@ def _normalized(value):
     return re.sub(r"[^a-z0-9]+", "", (value or "").casefold())
 
 
+def _title_score(local_title, candidate_title):
+    local = _normalized(local_title)
+    candidate = _normalized(candidate_title)
+    if not local or not candidate:
+        return 0
+    if local == candidate:
+        return 100
+    if candidate.startswith(local):
+        suffix = candidate[len(local) :]
+        if suffix in {"1", "book1", "bookone", "vol1", "volume1", "volumeone"}:
+            return 95
+    return 0
+
+
 class AudiobookshelfClient:
     def __init__(self, base_url, token, timeout=20):
         self.base_url = base_url.rstrip("/")
@@ -98,19 +112,22 @@ class ProgressSync:
             if len(results) == 1:
                 match = results[0]
             else:
-                exact = [
-                    result
-                    for result in results
-                    if _normalized(result.get("title")) == _normalized(title)
-                    and (
-                        not author_names
+                ranked = sorted(
+                    (
+                        (_title_score(title, result.get("title")), result)
+                        for result in results
+                        if not author_names
                         or _normalized(result.get("author"))
                         == _normalized(author_names[0])
-                    )
-                ]
-                if len(exact) != 1:
+                    ),
+                    key=lambda pair: pair[0],
+                    reverse=True,
+                )
+                if not ranked or ranked[0][0] < 90:
                     continue
-                match = exact[0]
+                if len(ranked) > 1 and ranked[0][0] == ranked[1][0]:
+                    continue
+                match = ranked[0][1]
             self.state["mappings"][item_id] = match["book_id"]
             return match["book_id"]
         return None
@@ -157,7 +174,7 @@ class ProgressSync:
                 )
                 if self.apply:
                     status = (remote.get("status") or "").strip().casefold()
-                    if not status or status == "to read":
+                    if not status or status in {"to read", "paused"}:
                         self._storygraph_result(
                             self.storygraph.update_status(
                                 storygraph_id, "currently-reading"
