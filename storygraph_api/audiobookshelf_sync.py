@@ -143,7 +143,7 @@ class ProgressSync:
                 )
                 remote_percent = int(remote.get("progress_percent") or 0)
                 floor = max(previous, remote_percent)
-                if percent < floor or (
+                if percent <= floor or (
                     not finished and percent - floor < self.minimum_change
                 ):
                     summary["unchanged"] += 1

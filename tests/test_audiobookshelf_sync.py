@@ -79,6 +79,18 @@ def test_never_moves_remote_progress_backward(tmp_path):
     storygraph.update_progress.assert_not_called()
 
 
+def test_finished_book_already_baselined_at_100_is_unchanged(tmp_path):
+    worker, storygraph = sync(
+        tmp_path,
+        {"libraryItemId": "abs-one", "progress": 0.97, "isFinished": True},
+        apply=True,
+    )
+    worker.state["progress"]["abs-one"] = 100
+    assert worker.run()["unchanged"] == 1
+    storygraph.update_progress.assert_not_called()
+    storygraph.update_status.assert_not_called()
+
+
 def test_ambiguous_match_is_skipped(tmp_path):
     worker, storygraph = sync(tmp_path, {"libraryItemId": "abs-one", "progress": 0.42})
     storygraph.search.return_value = result(
