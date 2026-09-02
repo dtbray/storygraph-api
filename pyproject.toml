@@ -43,6 +43,9 @@ Homepage = "https://github.com/dtbray/storygraph-api"
 Issues = "https://github.com/dtbray/storygraph-api/issues"
 Repository = "https://github.com/dtbray/storygraph-api"
 
+[project.scripts]
+storygraph-audiobookshelf-sync = "storygraph_api.audiobookshelf_sync:main"
+
 [tool.setuptools.packages.find]
 include = ["storygraph_api*"]
 
