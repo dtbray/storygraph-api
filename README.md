@@ -53,10 +53,12 @@ manager instead:
 ```python
 from storygraph_api import User
 
-user = User(cookies={
-    "_storygraph_session": "...",
-    "remember_user_token": "...",
-})
+user = User(
+    cookies={
+        "_storygraph_session": "...",
+        "remember_user_token": "...",
+    }
+)
 ```
 
 StoryGraph rotates `_storygraph_session` during normal requests. The client
@@ -82,8 +84,37 @@ books.get_ai_summary(book_id, user_id)
 ```
 
 Shelf and journal methods follow StoryGraph pagination until no new records are
-returned. All methods are read-only; no status, progress, tag, or journal data
-is modified.
+returned. Read methods do not modify StoryGraph. The authenticated book client
+also offers explicit progress and status writes:
+
+```python
+books.update_status(book_id, "currently-reading")
+books.update_progress(book_id, 42)
+books.update_status(book_id, "read")
+```
+
+These use StoryGraph's private web endpoints and may need updates if its forms
+change. Mutating requests are never automatically retried.
+
+### Audiobookshelf progress sync
+
+The bundled worker matches Audiobookshelf items to StoryGraph, sends monotonic
+percentage updates, and marks completed books as read. It is dry-run by default:
+
+```bash
+export AUDIOBOOKSHELF_URL=https://abs.example.com
+export AUDIOBOOKSHELF_TOKEN=...
+export STORYGRAPH_REMEMBER_TOKEN=...
+export STORYGRAPH_SESSION=...  # optional but recommended
+
+storygraph-audiobookshelf-sync
+storygraph-audiobookshelf-sync --apply --loop --interval 900
+```
+
+Mappings and last-sent progress are kept in `/data/state.json` by default.
+Matching prefers ISBN and ASIN searches and only accepts an unambiguous result.
+The worker never moves StoryGraph progress backward and leaves paused or DNF
+statuses alone. Mount `/data` persistently when running the container.
 
 ### Book Details:
 
@@ -92,6 +123,7 @@ is modified.
 # Fetch details of a book using its ID
 
 from storygraph_api import Book
+
 id = "fbdd6b7c-f512-47f2-aa94-d8bf0d5f5175"
 book = Book.from_firefox()
 result = book.book_info(id)
@@ -143,7 +175,6 @@ from storygraph_api import User
 user = User.from_browser()
 result = user.currently_reading("sampleuname")
 print(result)
-
 ```
 
 #### Result:

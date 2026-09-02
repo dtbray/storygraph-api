@@ -103,6 +103,59 @@ def test_book_path_segment_is_encoded():
     )
 
 
+def test_update_progress_fetches_csrf_and_posts_percentage():
+    transport = Mock()
+    page = Mock(
+        content=b'<meta name="csrf-token" content="secret">'
+        b'<input class="read-status-book-num-of-pages" value="300">'
+    )
+    transport.get.return_value = page
+    transport.request.return_value = Mock(status_code=200)
+
+    assert json.loads(Book(transport=transport).update_progress("book-one", 42)) == {
+        "book_id": "book-one",
+        "progress_percent": 42,
+    }
+    _, kwargs = transport.request.call_args
+    assert kwargs["data"]["read_status[progress_number]"] == "42"
+    assert kwargs["data"]["read_status[book_num_of_pages]"] == "300"
+    assert kwargs["headers"]["X-CSRF-Token"] == "secret"
+
+
+def test_update_status_encodes_values_and_posts_csrf():
+    transport = Mock()
+    transport.get.return_value = Mock(
+        content=b'<meta name="csrf-token" content="secret">'
+    )
+    transport.request.return_value = Mock(status_code=200)
+
+    result = json.loads(Book(transport=transport).update_status("book/one", "read"))
+    assert result == {"book_id": "book/one", "status": "read"}
+    assert transport.request.call_args.args[:2] == (
+        "POST",
+        "/update-status.js?book_id=book%2Fone&status=read",
+    )
+
+
+@pytest.mark.parametrize("percent", [-1, 101, 1.5, True])
+def test_update_progress_rejects_invalid_percent(percent):
+    with pytest.raises(Exception, match="percent must be"):
+        Book(transport=Mock()).update_progress("book-one", percent)
+
+
+def test_update_status_rejects_unknown_status():
+    with pytest.raises(Exception, match="status must be one of"):
+        Book(transport=Mock()).update_status("book-one", "finished")
+
+
+def test_mutation_requires_csrf_token():
+    transport = Mock()
+    transport.get.return_value = Mock(content=b"<html></html>")
+    result = json.loads(Book(transport=transport).update_progress("book-one", 42))
+    assert "CSRF" in result["error"]
+    transport.request.assert_not_called()
+
+
 def test_username_path_segment_is_encoded():
     transport = Mock()
     response = Mock(text="ok")

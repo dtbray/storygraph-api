@@ -1,8 +1,10 @@
 from urllib.parse import quote
 
 import requests
+from bs4 import BeautifulSoup
 
 from storygraph_api.exception_handler import request_exception
+from storygraph_api.exceptions import RequestError
 
 
 class BooksScraper:
@@ -60,3 +62,58 @@ class BooksScraper:
         )
         response.raise_for_status()
         return response.content
+
+    @staticmethod
+    def _book_page_and_csrf(book_id, transport):
+        encoded_id = quote(str(book_id), safe="")
+        response = transport.get(f"/books/{encoded_id}")
+        soup = BeautifulSoup(response.content, "html.parser")
+        token = soup.select_one('meta[name="csrf-token"]')
+        csrf = token.get("content") if token else None
+        if not csrf:
+            raise RequestError("StoryGraph did not provide a CSRF token.")
+        total = soup.select_one("input.read-status-book-num-of-pages")
+        total_pages = total.get("value", "0") if total else "0"
+        return csrf, total_pages
+
+    @staticmethod
+    @request_exception
+    def update_progress(book_id, percent, transport):
+        csrf, total_pages = BooksScraper._book_page_and_csrf(book_id, transport)
+        encoded_id = quote(str(book_id), safe="")
+        return transport.request(
+            "POST",
+            "/update-progress",
+            data={
+                "read_status[progress_number]": str(percent),
+                "read_status[progress_type]": "percentage",
+                "read_status[book_num_of_pages]": total_pages,
+                "book_id": str(book_id),
+                "on_book_page": "true",
+                "authenticity_token": csrf,
+            },
+            headers={
+                "X-CSRF-Token": csrf,
+                "X-Requested-With": "XMLHttpRequest",
+                "Accept": "text/javascript, application/javascript, */*; q=0.01",
+                "Referer": f"https://app.thestorygraph.com/books/{encoded_id}",
+            },
+        )
+
+    @staticmethod
+    @request_exception
+    def update_status(book_id, status, transport):
+        csrf, _ = BooksScraper._book_page_and_csrf(book_id, transport)
+        encoded_id = quote(str(book_id), safe="")
+        encoded_status = quote(status, safe="-")
+        return transport.request(
+            "POST",
+            f"/update-status.js?book_id={encoded_id}&status={encoded_status}",
+            data={"authenticity_token": csrf},
+            headers={
+                "X-CSRF-Token": csrf,
+                "X-Requested-With": "XMLHttpRequest",
+                "Accept": "text/javascript, application/javascript, */*; q=0.01",
+                "Referer": f"https://app.thestorygraph.com/books/{encoded_id}",
+            },
+        )
