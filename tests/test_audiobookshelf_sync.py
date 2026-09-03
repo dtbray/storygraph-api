@@ -1,7 +1,11 @@
 import json
+import re
 from unittest.mock import Mock
 
+import requests
+
 from storygraph_api.audiobookshelf_sync import ProgressSync
+from storygraph_api.review_server import _layout, start_review_server
 
 
 def result(value):
@@ -151,3 +155,118 @@ def test_matcher_rejects_tied_high_confidence_titles(tmp_path):
         ]
     )
     assert worker.run()["unmatched"] == 1
+
+
+def test_unmatched_book_is_available_for_accessible_review(tmp_path):
+    worker, storygraph = sync(
+        tmp_path, {"libraryItemId": "abs-one", "progress": 0.42}, apply=True
+    )
+    storygraph.search.return_value = result(
+        [
+            {
+                "book_id": "candidate-one",
+                "title": "Example Book: A Novel",
+                "author": "Example Author",
+            },
+            {
+                "book_id": "candidate-two",
+                "title": "Different Book",
+                "author": "Other Author",
+            },
+        ]
+    )
+
+    assert worker.run()["unmatched"] == 1
+    review = worker.state["unmatched"]["abs-one"]
+    assert review["item"]["title"] == "Example Book"
+    matching_author = next(
+        candidate
+        for candidate in review["candidates"]
+        if candidate["book_id"] == "candidate-one"
+    )
+    assert matching_author["reason"] == "Author matches; title differs"
+    page = _layout(worker, "csrf-value")
+    assert "Example Book" in page
+    assert "candidate-one" in page
+    assert 'role="status"' not in page
+
+
+def test_review_actions_persist_and_wake_the_worker(tmp_path):
+    worker, _ = sync(
+        tmp_path, {"libraryItemId": "abs-one", "progress": 0.42}, apply=True
+    )
+    worker.state["unmatched"]["abs-one"] = {
+        "item": {"id": "abs-one", "title": "Example Book", "author": "Author"},
+        "candidates": [
+            {
+                "book_id": "candidate-one",
+                "title": "Example Book",
+                "author": "Author",
+                "score": 100,
+                "reason": "Exact title and author",
+            }
+        ],
+    }
+
+    worker.confirm_match("abs-one", "candidate-one")
+    assert worker.state["mappings"]["abs-one"] == "candidate-one"
+    assert worker.wake_event.is_set()
+    assert json.loads((tmp_path / "state.json").read_text())["mappings"] == {
+        "abs-one": "candidate-one"
+    }
+
+    worker.undo_match("abs-one")
+    assert "abs-one" not in worker.state["mappings"]
+
+    worker.state["unmatched"]["abs-one"] = {
+        "item": {"id": "abs-one", "title": "Example Book", "author": "Author"},
+        "candidates": [],
+    }
+    worker.ignore_match("abs-one")
+    assert "abs-one" in worker.state["ignored"]
+    worker.retry_match("abs-one")
+    assert "abs-one" not in worker.state["ignored"]
+
+
+def test_review_server_requires_auth_and_accepts_confirmation(tmp_path, monkeypatch):
+    worker, _ = sync(
+        tmp_path, {"libraryItemId": "abs-one", "progress": 0.42}, apply=True
+    )
+    worker.state["unmatched"]["abs-one"] = {
+        "item": {"id": "abs-one", "title": "Example Book", "author": "Author"},
+        "candidates": [
+            {
+                "book_id": "candidate-one",
+                "title": "Example Book",
+                "author": "Author",
+                "score": 100,
+                "reason": "Exact title and author",
+            }
+        ],
+    }
+    monkeypatch.setenv("MATCH_REVIEW_USERNAME", "reader")
+    monkeypatch.setenv("MATCH_REVIEW_PASSWORD", "secret")
+    server = start_review_server(worker, 0)
+    url = f"http://127.0.0.1:{server.server_port}"
+    try:
+        assert requests.get(url, timeout=2).status_code == 401
+        page = requests.get(url, auth=("reader", "secret"), timeout=2)
+        assert page.status_code == 200
+        assert "Content-Security-Policy" in page.headers
+        csrf = re.search('name="csrf" value="([^"]+)"', page.text).group(1)
+        response = requests.post(
+            f"{url}/confirm",
+            auth=("reader", "secret"),
+            data={
+                "csrf": csrf,
+                "item_id": "abs-one",
+                "storygraph_id": "candidate-one",
+            },
+            allow_redirects=False,
+            timeout=2,
+        )
+        assert response.status_code == 303
+        assert worker.state["mappings"]["abs-one"] == "candidate-one"
+    finally:
+        server.shutdown()
+        server.server_close()

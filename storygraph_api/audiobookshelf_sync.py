@@ -5,8 +5,9 @@ import json
 import logging
 import os
 import re
-import time
+import threading
 from pathlib import Path
+from urllib.parse import quote
 
 import requests
 
@@ -54,6 +55,14 @@ class AudiobookshelfClient:
         response.raise_for_status()
         return response.json()
 
+    def cover(self, item_id):
+        response = self.session.get(
+            f"{self.base_url}/api/items/{quote(item_id, safe='')}/cover",
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+        return response
+
 
 class ProgressSync:
     def __init__(
@@ -72,13 +81,18 @@ class ProgressSync:
         self.apply = apply
         self.minimum_change = minimum_change
         self.finish_threshold = finish_threshold
+        self.lock = threading.RLock()
+        self.wake_event = threading.Event()
         self.state = self._load_state()
 
     def _load_state(self):
         try:
-            return json.loads(self.state_path.read_text(encoding="utf-8"))
+            state = json.loads(self.state_path.read_text(encoding="utf-8"))
         except FileNotFoundError:
-            return {"mappings": {}, "progress": {}}
+            state = {}
+        for key in ("mappings", "progress", "unmatched", "ignored"):
+            state.setdefault(key, {})
+        return state
 
     def _save_state(self):
         if not self.apply:
@@ -99,6 +113,8 @@ class ProgressSync:
         existing = self.state["mappings"].get(item_id)
         if existing:
             return existing
+        if item_id in self.state["ignored"]:
+            return None
 
         metadata = item.get("media", {}).get("metadata", {})
         identifiers = [metadata.get("isbn"), metadata.get("asin")]
@@ -107,8 +123,20 @@ class ProgressSync:
         author_names = [a.get("name") if isinstance(a, dict) else a for a in authors]
         queries = [value for value in identifiers if value]
         queries.append(" ".join(value for value in (title, *author_names[:1]) if value))
+        review_candidates = {}
         for query in queries:
             results = self._storygraph_result(self.storygraph.search(query))
+            for result in results:
+                score = _title_score(title, result.get("title"))
+                author_match = not author_names or _normalized(
+                    result.get("author")
+                ) == _normalized(author_names[0])
+                candidate = dict(result)
+                candidate["score"] = score if author_match else 0
+                candidate["reason"] = self._match_reason(score, author_match)
+                previous = review_candidates.get(result["book_id"])
+                if previous is None or candidate["score"] > previous["score"]:
+                    review_candidates[result["book_id"]] = candidate
             if len(results) == 1:
                 match = results[0]
             else:
@@ -129,16 +157,93 @@ class ProgressSync:
                     continue
                 match = ranked[0][1]
             self.state["mappings"][item_id] = match["book_id"]
+            self.state["unmatched"].pop(item_id, None)
             return match["book_id"]
+        self.state["unmatched"][item_id] = {
+            "item": {
+                "id": item_id,
+                "title": title or "Untitled audiobook",
+                "author": author_names[0] if author_names else None,
+                "isbn": metadata.get("isbn"),
+                "asin": metadata.get("asin"),
+            },
+            "candidates": sorted(
+                review_candidates.values(),
+                key=lambda candidate: (-candidate["score"], candidate["title"]),
+            )[:10],
+        }
         return None
 
+    @staticmethod
+    def _match_reason(score, author_match):
+        if not author_match:
+            return "Author differs"
+        if score == 100:
+            return "Exact title and author"
+        if score >= 90:
+            return "Likely Book One title variant"
+        return "Author matches; title differs"
+
+    def confirm_match(self, item_id, storygraph_id):
+        with self.lock:
+            review = self.state["unmatched"].get(item_id)
+            allowed = (
+                {candidate["book_id"] for candidate in review.get("candidates", [])}
+                if review
+                else set()
+            )
+            if storygraph_id not in allowed:
+                raise ValueError("candidate is not available for this audiobook")
+            self.state["mappings"][item_id] = storygraph_id
+            self.state["progress"].pop(item_id, None)
+            self.state["unmatched"].pop(item_id, None)
+            self.state["ignored"].pop(item_id, None)
+            self._save_state()
+            self.wake_event.set()
+
+    def ignore_match(self, item_id):
+        with self.lock:
+            review = self.state["unmatched"].pop(item_id, None)
+            if review is None:
+                raise ValueError("audiobook is not awaiting review")
+            self.state["ignored"][item_id] = review["item"]
+            self._save_state()
+
+    def retry_match(self, item_id):
+        with self.lock:
+            if (
+                item_id not in self.state["unmatched"]
+                and item_id not in self.state["ignored"]
+            ):
+                raise ValueError("audiobook is not awaiting review or ignored")
+            self.state["unmatched"].pop(item_id, None)
+            self.state["ignored"].pop(item_id, None)
+            self._save_state()
+            self.wake_event.set()
+
+    def undo_match(self, item_id):
+        with self.lock:
+            if item_id not in self.state["mappings"]:
+                raise ValueError("audiobook does not have a confirmed mapping")
+            self.state["mappings"].pop(item_id)
+            self.state["progress"].pop(item_id, None)
+            self._save_state()
+            self.wake_event.set()
+
     def run(self):
+        with self.lock:
+            return self._run_locked()
+
+    def _run_locked(self):
         summary = {"updated": 0, "unchanged": 0, "unmatched": 0, "errors": 0}
         for progress in self.audiobookshelf.progress():
             try:
                 if not progress.get("libraryItemId"):
                     continue
                 item = self.audiobookshelf.item(progress["libraryItemId"])
+                if item["id"] in self.state["ignored"]:
+                    summary["unchanged"] += 1
+                    continue
                 storygraph_id = self._match(item)
                 if not storygraph_id:
                     LOG.warning(
@@ -232,14 +337,27 @@ def main(argv=None):
     parser.add_argument("--minimum-change", type=int, default=2)
     parser.add_argument("--finish-threshold", type=int, default=99)
     parser.add_argument("--state", default="/data/state.json")
+    parser.add_argument(
+        "--review-port", type=int, default=0, help="serve the match-review UI"
+    )
     args = parser.parse_args(argv)
     logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
+    sync = build_sync(args)
+    server = None
+    if args.review_port:
+        from storygraph_api.review_server import start_review_server
+
+        server = start_review_server(sync, args.review_port)
+        LOG.info("Match-review UI listening on port %s", args.review_port)
     while True:
-        summary = build_sync(args).run()
+        sync.wake_event.clear()
+        summary = sync.run()
         LOG.info("Sync summary: %s", json.dumps(summary, sort_keys=True))
         if not args.loop:
+            if server:
+                server.shutdown()
             return 1 if summary["errors"] else 0
-        time.sleep(max(60, args.interval))
+        sync.wake_event.wait(max(60, args.interval))
 
 
 if __name__ == "__main__":
