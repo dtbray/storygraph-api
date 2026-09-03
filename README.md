@@ -113,8 +113,24 @@ storygraph-audiobookshelf-sync --apply --loop --interval 900
 
 Mappings and last-sent progress are kept in `/data/state.json` by default.
 Matching prefers ISBN and ASIN searches and only accepts an unambiguous result.
-The worker never moves StoryGraph progress backward and leaves paused or DNF
-statuses alone. Mount `/data` persistently when running the container.
+The worker never moves StoryGraph progress backward. New progress resumes paused
+books as currently reading, while DNF books are left alone. Mount `/data`
+persistently when running the container.
+
+Ambiguous matches can be reviewed in an optional, accessible web interface:
+
+```bash
+export MATCH_REVIEW_USERNAME=...
+export MATCH_REVIEW_PASSWORD=...
+storygraph-audiobookshelf-sync --apply --loop --review-port 8080
+```
+
+The review interface lists the best StoryGraph candidates and the reason for
+each score. Confirmed mappings and ignored books are persisted in the same state
+file as progress. Confirming, retrying, or undoing a match wakes the worker for
+an immediate sync. The interface requires HTTP Basic authentication, protects
+write actions with a CSRF token, and should only be exposed through HTTPS or a
+trusted authenticated reverse proxy.
 
 ### Book Details:
 
